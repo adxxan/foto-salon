@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import './App.css';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
-function Login({ setToken, setUser }) {
+function Login({ setUser }) {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', password: '', fullName: '', phone: '', email: '' });
   const [error, setError] = useState('');
@@ -17,10 +18,9 @@ function Login({ setToken, setUser }) {
         const response = await axios.post('http://localhost:5000/api/login', {
           username: formData.username,
           password: formData.password
-        });
-        localStorage.setItem('token', response.data.token);
+        }, { withCredentials: true });
+        
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        setToken(response.data.token);
         setUser(response.data.user);
       } else {
         await axios.post('http://localhost:5000/api/register', formData);
@@ -62,6 +62,7 @@ function Home({ user }) {
   const [selectedService, setSelectedService] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [notes, setNotes] = useState('');
+  const [bookingDate, setBookingDate] = useState('');
 
   useEffect(() => {
     fetchServices();
@@ -72,16 +73,20 @@ function Home({ user }) {
     setServices(response.data);
   };
 
-  const createOrder = async () => {
-    const token = localStorage.getItem('token');
-    await axios.post('http://localhost:5000/api/orders', 
-      { serviceId: selectedService.id, notes },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    setShowModal(false);
-    setNotes('');
-    alert('Заказ успешно создан!');
-  };
+const createOrder = async () => {
+  if (!bookingDate) {
+    alert('Выберите дату и время');
+    return;
+  }
+  await axios.post('http://localhost:5000/api/orders', 
+    { serviceId: selectedService.id, notes, bookingDate },
+    { withCredentials: true }
+  );
+  setShowModal(false);
+  setNotes('');
+  setBookingDate('');
+  alert('Заказ успешно создан!');
+};
 
   return (
     <div className="home">
@@ -113,6 +118,13 @@ function Home({ user }) {
         <div className="modal">
           <div className="modal-content">
             <h3>Заказ услуги: {selectedService?.name}</h3>
+            <input 
+              type="datetime-local" 
+              value={bookingDate} 
+              onChange={(e) => setBookingDate(e.target.value)} 
+              required 
+              style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+            />
             <textarea placeholder="Ваши пожелания" value={notes} onChange={(e) => setNotes(e.target.value)}></textarea>
             <button onClick={createOrder}>Подтвердить заказ</button>
             <button onClick={() => setShowModal(false)}>Отмена</button>
@@ -123,20 +135,30 @@ function Home({ user }) {
   );
 }
 
-function Profile({ user }) {
+function Profile({ user, showNotification }) {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     fetchOrders();
   }, []);
 
-  const fetchOrders = async () => {
-    const token = localStorage.getItem('token');
-    const response = await axios.get('http://localhost:5000/api/orders', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setOrders(response.data);
-  };
+const fetchOrders = async () => {
+  const response = await axios.get('http://localhost:5000/api/orders', {
+    withCredentials: true
+  });
+  
+  const savedStatuses = JSON.parse(localStorage.getItem('orderStatuses') || '{}');
+  response.data.forEach(order => {
+    if (savedStatuses[order.id] !== order.status) {
+      const statusText = getStatusText(order.status);
+      showNotification('Статус заказа изменён', `Заказ "${order.serviceName}" теперь: ${statusText}`);
+      savedStatuses[order.id] = order.status;
+    }
+  });
+  localStorage.setItem('orderStatuses', JSON.stringify(savedStatuses));
+  
+  setOrders(response.data);
+};
 
   const getStatusText = (status) => {
     const statusMap = {
@@ -186,7 +208,7 @@ function Profile({ user }) {
   );
 }
 
-function AdminPanel({ user }) {
+function AdminPanel({ user, showNotification }) {
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({});
   const [newPortfolio, setNewPortfolio] = useState({ title: '', description: '', category: '', image: null });
@@ -199,17 +221,15 @@ function AdminPanel({ user }) {
   }, []);
 
   const fetchOrders = async () => {
-    const token = localStorage.getItem('token');
     const response = await axios.get('http://localhost:5000/api/orders', {
-      headers: { Authorization: `Bearer ${token}` }
+      withCredentials: true
     });
     setOrders(response.data);
   };
 
   const fetchStats = async () => {
-    const token = localStorage.getItem('token');
     const response = await axios.get('http://localhost:5000/api/admin/stats', {
-      headers: { Authorization: `Bearer ${token}` }
+      withCredentials: true
     });
     setStats(response.data);
   };
@@ -220,17 +240,20 @@ function AdminPanel({ user }) {
   };
 
   const updateOrderStatus = async (orderId, status) => {
-    const token = localStorage.getItem('token');
     await axios.put(`http://localhost:5000/api/orders/${orderId}`, 
       { status },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { withCredentials: true }
     );
+    const order = orders.find(o => o.id === orderId);
+    if (order && showNotification) {
+      showNotification('Статус заказа обновлён', `Заказ "${order.serviceName}" изменён на: ${status}`);
+    }
     fetchOrders();
+    fetchStats();
   };
 
   const addToPortfolio = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
     const formData = new FormData();
     formData.append('title', newPortfolio.title);
     formData.append('description', newPortfolio.description);
@@ -238,11 +261,24 @@ function AdminPanel({ user }) {
     formData.append('image', newPortfolio.image);
     
     await axios.post('http://localhost:5000/api/portfolio', formData, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      withCredentials: true,
+      headers: { 'Content-Type': 'multipart/form-data' }
     });
     fetchPortfolio();
     setNewPortfolio({ title: '', description: '', category: '', image: null });
   };
+
+  // Подготовка данных для графика
+  const chartData = orders.reduce((acc, order) => {
+    const date = new Date(order.orderDate).toLocaleDateString();
+    const existing = acc.find(item => item.date === date);
+    if (existing) {
+      existing.orders += 1;
+    } else {
+      acc.push({ date, orders: 1 });
+    }
+    return acc;
+  }, []).slice(-7);
 
   return (
     <div className="admin-panel">
@@ -261,6 +297,19 @@ function AdminPanel({ user }) {
           <h3>{stats.totalRevenue || 0} сом</h3>
           <p>Выручка</p>
         </div>
+      </div>
+
+      <div className="admin-section">
+        <h3>Динамика заказов (последние 7 дней)</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="orders" fill="#ff6b6b" />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="admin-section">
@@ -326,18 +375,27 @@ function AdminPanel({ user }) {
 }
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('token'));
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
+  const showNotification = (title, body) => {
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification(title, { body });
+        }
+      });
+    }
+  };
+
+  const handleLogout = async () => {
     localStorage.removeItem('user');
-    setToken(null);
     setUser(null);
   };
 
-  if (!token) {
-    return <Login setToken={setToken} setUser={setUser} />;
+  if (!user) {
+    return <Login setUser={setUser} />;
   }
 
   return (
@@ -358,8 +416,8 @@ function App() {
         
         <Routes>
           <Route path="/" element={<Home user={user} />} />
-          <Route path="/profile" element={<Profile user={user} />} />
-          <Route path="/admin" element={user?.role === 'admin' ? <AdminPanel user={user} /> : <Navigate to="/" />} />
+          <Route path="/profile" element={<Profile user={user} showNotification={showNotification} />} />
+          <Route path="/admin" element={user?.role === 'admin' ? <AdminPanel user={user} showNotification={showNotification} /> : <Navigate to="/" />} />
         </Routes>
       </div>
     </Router>

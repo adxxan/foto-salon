@@ -5,14 +5,28 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = 5000;
 const SECRET_KEY = 'foto-salon-secret-key-2025';
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100,
+  message: { error: 'Слишком много запросов, попробуйте позже' }
+});
+
+app.use('/api/', limiter);
 
 
 const db = new sqlite3.Database('./database.sqlite');
@@ -45,6 +59,7 @@ db.serialize(() => {
     serviceId INTEGER,
     status TEXT DEFAULT 'pending',
     orderDate TEXT,
+    bookingDate TEXT,
     completionDate TEXT,
     totalPrice REAL,
     notes TEXT,
@@ -80,8 +95,7 @@ db.serialize(() => {
 });
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = req.cookies.token;
   
   if (!token) {
     return res.status(401).json({ error: 'Требуется авторизация' });
@@ -129,7 +143,12 @@ app.post('/api/login', (req, res) => {
     
     if (bcrypt.compareSync(password, user.password)) {
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: '24h' });
-      res.json({ token, user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName } });
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 86400000
+      }).json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName } });
     } else {
       res.status(400).json({ error: 'Неверный пароль' });
     }
@@ -147,25 +166,39 @@ app.get('/api/services', (req, res) => {
 });
 
 app.post('/api/orders', authenticateToken, (req, res) => {
-  const { serviceId, notes } = req.body;
+  const { serviceId, notes, bookingDate } = req.body;
   const orderDate = new Date().toISOString();
   
-  db.get(`SELECT price FROM services WHERE id = ?`, [serviceId], (err, service) => {
-    if (err || !service) {
-      return res.status(404).json({ error: 'Услуга не найдена' });
-    }
-    
-    db.run(`INSERT INTO orders (userId, serviceId, orderDate, totalPrice, notes, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [req.user.id, serviceId, orderDate, service.price, notes],
-      function(err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-        } else {
-          res.json({ id: this.lastID, message: 'Заказ создан' });
-        }
-      });
-  });
+  if (bookingDate) {
+    db.get(`SELECT * FROM orders WHERE bookingDate = ? AND status != 'cancelled'`, [bookingDate], (err, existing) => {
+      if (existing) {
+        return res.status(409).json({ error: 'Это время уже занято, выберите другое' });
+      }
+      
+      createOrder();
+    });
+  } else {
+    createOrder();
+  }
+  
+  function createOrder() {
+    db.get(`SELECT price FROM services WHERE id = ?`, [serviceId], (err, service) => {
+      if (err || !service) {
+        return res.status(404).json({ error: 'Услуга не найдена' });
+      }
+      
+      db.run(`INSERT INTO orders (userId, serviceId, orderDate, bookingDate, totalPrice, notes, status)
+              VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+        [req.user.id, serviceId, orderDate, bookingDate || null, service.price, notes],
+        function(err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+          } else {
+            res.json({ id: this.lastID, message: 'Заказ создан' });
+          }
+        });
+    });
+  }
 });
 
 app.get('/api/orders', authenticateToken, (req, res) => {
