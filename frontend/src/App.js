@@ -4,6 +4,8 @@ import axios from 'axios';
 import './App.css';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
+const API_URL = 'https://foto-salon-production.up.railway.app/api';
+
 function Login({ setUser }) {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', password: '', fullName: '', phone: '', email: '' });
@@ -15,7 +17,7 @@ function Login({ setUser }) {
     
     try {
       if (isLogin) {
-        const response = await axios.post('http://localhost:5000/api/login', {
+        const response = await axios.post(`${API_URL}/login`, {
           username: formData.username,
           password: formData.password
         }, { withCredentials: true });
@@ -23,7 +25,7 @@ function Login({ setUser }) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
         setUser(response.data.user);
       } else {
-        await axios.post('http://localhost:5000/api/register', formData);
+        await axios.post(`${API_URL}/register`, formData);
         setIsLogin(true);
         setFormData({ username: '', password: '', fullName: '', phone: '', email: '' });
       }
@@ -69,24 +71,24 @@ function Home({ user }) {
   }, []);
 
   const fetchServices = async () => {
-    const response = await axios.get('http://localhost:5000/api/services');
+    const response = await axios.get(`${API_URL}/services`);
     setServices(response.data);
   };
 
-const createOrder = async () => {
-  if (!bookingDate) {
-    alert('Выберите дату и время');
-    return;
-  }
-  await axios.post('http://localhost:5000/api/orders', 
-    { serviceId: selectedService.id, notes, bookingDate },
-    { withCredentials: true }
-  );
-  setShowModal(false);
-  setNotes('');
-  setBookingDate('');
-  alert('Заказ успешно создан!');
-};
+  const createOrder = async () => {
+    if (!bookingDate) {
+      alert('Выберите дату и время');
+      return;
+    }
+    await axios.post(`${API_URL}/orders`, 
+      { serviceId: selectedService.id, notes, bookingDate },
+      { withCredentials: true }
+    );
+    setShowModal(false);
+    setNotes('');
+    setBookingDate('');
+    alert('Заказ успешно создан!');
+  };
 
   return (
     <div className="home">
@@ -142,23 +144,23 @@ function Profile({ user, showNotification }) {
     fetchOrders();
   }, []);
 
-const fetchOrders = async () => {
-  const response = await axios.get('http://localhost:5000/api/orders', {
-    withCredentials: true
-  });
-  
-  const savedStatuses = JSON.parse(localStorage.getItem('orderStatuses') || '{}');
-  response.data.forEach(order => {
-    if (savedStatuses[order.id] !== order.status) {
-      const statusText = getStatusText(order.status);
-      showNotification('Статус заказа изменён', `Заказ "${order.serviceName}" теперь: ${statusText}`);
-      savedStatuses[order.id] = order.status;
-    }
-  });
-  localStorage.setItem('orderStatuses', JSON.stringify(savedStatuses));
-  
-  setOrders(response.data);
-};
+  const fetchOrders = async () => {
+    const response = await axios.get(`${API_URL}/orders`, {
+      withCredentials: true
+    });
+    
+    const savedStatuses = JSON.parse(localStorage.getItem('orderStatuses') || '{}');
+    response.data.forEach(order => {
+      if (savedStatuses[order.id] !== order.status) {
+        const statusText = getStatusText(order.status);
+        showNotification('Статус заказа изменён', `Заказ "${order.serviceName}" теперь: ${statusText}`);
+        savedStatuses[order.id] = order.status;
+      }
+    });
+    localStorage.setItem('orderStatuses', JSON.stringify(savedStatuses));
+    
+    setOrders(response.data);
+  };
 
   const getStatusText = (status) => {
     const statusMap = {
@@ -221,26 +223,26 @@ function AdminPanel({ user, showNotification }) {
   }, []);
 
   const fetchOrders = async () => {
-    const response = await axios.get('http://localhost:5000/api/orders', {
+    const response = await axios.get(`${API_URL}/orders`, {
       withCredentials: true
     });
     setOrders(response.data);
   };
 
   const fetchStats = async () => {
-    const response = await axios.get('http://localhost:5000/api/admin/stats', {
+    const response = await axios.get(`${API_URL}/admin/stats`, {
       withCredentials: true
     });
     setStats(response.data);
   };
 
   const fetchPortfolio = async () => {
-    const response = await axios.get('http://localhost:5000/api/portfolio');
+    const response = await axios.get(`${API_URL}/portfolio`);
     setPortfolio(response.data);
   };
 
   const updateOrderStatus = async (orderId, status) => {
-    await axios.put(`http://localhost:5000/api/orders/${orderId}`, 
+    await axios.put(`${API_URL}/orders/${orderId}`, 
       { status },
       { withCredentials: true }
     );
@@ -260,7 +262,7 @@ function AdminPanel({ user, showNotification }) {
     formData.append('category', newPortfolio.category);
     formData.append('image', newPortfolio.image);
     
-    await axios.post('http://localhost:5000/api/portfolio', formData, {
+    await axios.post(`${API_URL}/portfolio`, formData, {
       withCredentials: true,
       headers: { 'Content-Type': 'multipart/form-data' }
     });
@@ -268,7 +270,6 @@ function AdminPanel({ user, showNotification }) {
     setNewPortfolio({ title: '', description: '', category: '', image: null });
   };
 
-  // Подготовка данных для графика
   const chartData = orders.reduce((acc, order) => {
     const date = new Date(order.orderDate).toLocaleDateString();
     const existing = acc.find(item => item.date === date);
@@ -340,11 +341,11 @@ function AdminPanel({ user, showNotification }) {
                     <option value="completed">Выполнен</option>
                     <option value="cancelled">Отменен</option>
                   </select>
-                </td>
-              </tr>
+                 </td>
+               </tr>
             ))}
           </tbody>
-        </table>
+         </table>
       </div>
 
       <div className="admin-section">
@@ -363,7 +364,7 @@ function AdminPanel({ user, showNotification }) {
         <div className="portfolio-grid">
           {portfolio.map(item => (
             <div key={item.id} className="portfolio-item">
-              <img src={`http://localhost:5000${item.imageUrl}`} alt={item.title} />
+              <img src={`https://foto-salon-production.up.railway.app${item.imageUrl}`} alt={item.title} />
               <h4>{item.title}</h4>
               <p>{item.description}</p>
             </div>
