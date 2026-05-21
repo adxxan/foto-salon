@@ -1,21 +1,5 @@
 {
-  "$schema": "https://railpack.com/schema.json",
-  "build": {
-    "steps": {
-      "install-backend": {
-        "inputs": ["."],
-        "commands": [
-          "cd backend",
-          "npm install"
-        ]
-      }
-    }
-  },
   "deploy": {
-    "startCommand": "cd backend && node server.js",
-    "variables": {
-      "NODE_ENV": "production",
-      "PORT": "5000"
-    }
+    "startCommand": "node server.js"
   }
 }
