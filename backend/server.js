@@ -8,13 +8,13 @@ const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000; 
 const SECRET_KEY = 'foto-salon-secret-key-2025';
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: true,
   credentials: true
 }));
 app.use(express.json());
