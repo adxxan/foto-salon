@@ -101,7 +101,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Multer для загрузки изображений
 const storage = multer.diskStorage({
   destination: './uploads/',
   filename: (req, file, cb) => {
@@ -136,8 +135,8 @@ app.post('/api/login', (req, res) => {
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: '24h' });
     res.cookie('token', token, {
       httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       maxAge: 86400000
     }).json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName } });
   } else {
