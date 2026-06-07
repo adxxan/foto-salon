@@ -128,8 +128,10 @@ function Home({ user }) {
               style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
             />
             <textarea placeholder="Ваши пожелания" value={notes} onChange={(e) => setNotes(e.target.value)}></textarea>
-            <button onClick={createOrder}>Подтвердить заказ</button>
-            <button onClick={() => setShowModal(false)}>Отмена</button>
+            <div className="modal-actions">
+              <button onClick={createOrder}>Подтвердить заказ</button>
+              <button onClick={() => setShowModal(false)}>Отмена</button>
+            </div>
           </div>
         </div>
       )}
