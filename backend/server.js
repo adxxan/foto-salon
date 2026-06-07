@@ -74,6 +74,15 @@ db.exec(`
   );
 `);
 
+try {
+  db.exec('ALTER TABLE orders ADD COLUMN bookingDate TEXT');
+  console.log('✓ Колонка bookingDate добавлена');
+} catch (err) {
+  if (!err.message.includes('duplicate column name')) {
+    console.log('Ошибка:', err.message);
+  }
+}
+
 const adminPassword = bcrypt.hashSync('admin123', 10);
 const clientPassword = bcrypt.hashSync('client123', 10);
 
